@@ -537,21 +537,6 @@ class _CompactMixin:
             *((source, owner_account_id) for source, owner_account_id, _session_id in owner_refs)
         )
         if resolved_owner is not None:
-            session_identities = {
-                session_identity
-                for _source, owner_account_id, session_identity in owner_refs
-                if owner_account_id == resolved_owner and session_identity is not None
-            }
-            if len(session_identities) > 1:
-                sources = ", ".join(source for source, _account_id, _session_id in owner_refs)
-                raise ProxyResponseError(
-                    502,
-                    openai_error(
-                        "continuity_owner_conflict",
-                        f"Account-owned continuity sources conflict ({sources}); retry the logical turn.",
-                        error_type="server_error",
-                    ),
-                )
             return resolved_owner
         if not fail_on_missing:
             return None
@@ -686,6 +671,9 @@ class _CompactMixin:
             ("previous response", previous_response_preferred_account_id),
             ("input file", rewritten_file_account_id),
         )
+        selection_affinity = affinity
+        if preferred_account_id is not None and affinity.kind == StickySessionKind.CODEX_SESSION:
+            selection_affinity = _AffinityPolicy(require_unambiguous_account=affinity.require_unambiguous_account)
         try:
 
             async def _call_compact(
@@ -846,7 +834,7 @@ class _CompactMixin:
                     request_id=request_id,
                     kind="compact",
                     api_key=api_key,
-                    affinity_policy=affinity,
+                    affinity_policy=selection_affinity,
                     prefer_earlier_reset_accounts=prefer_earlier_reset,
                     prefer_earlier_reset_window=_prefer_earlier_reset_window(settings),
                     routing_strategy=routing_strategy,
@@ -877,7 +865,7 @@ class _CompactMixin:
                             request_id=request_id,
                             kind="compact",
                             api_key=api_key,
-                            affinity_policy=affinity,
+                            affinity_policy=selection_affinity,
                             prefer_earlier_reset_accounts=prefer_earlier_reset,
                             prefer_earlier_reset_window=_prefer_earlier_reset_window(settings),
                             routing_strategy=routing_strategy,
